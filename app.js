@@ -60,27 +60,110 @@ $("logoInput").addEventListener("change",e=>{
  const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){setStatus("Logo harus berupa file gambar.");return}
  const u=URL.createObjectURL(f);const im=new Image();im.onload=()=>{logoImage=im;$("logoThumb").src=u;$("logoThumb").hidden=false;render()};im.onerror=()=>setStatus("Logo tidak dapat dibaca.");im.src=u;
 });
-$("photoInput").addEventListener("change",async e=>{
-  const file=e.target.files[0];if(!file)return;if(!file.type.startsWith("image/")){setStatus("File harus berupa gambar.");return}
-  photoFile=file;setStatus("Memuat foto dan membaca metadata…");
-  try{
-    const url=URL.createObjectURL(file);photo=await createImageBitmap(file,{imageOrientation:"from-image"});
-    $("emptyState").style.display="none";canvas.style.display="block";
-    $("orientationTag").textContent=photo.width>=photo.height?"Landscape":"Portrait";
-    let exif={};try{exif=await exifr.parse(file,{gps:true,exif:true})||{}}catch(e){}
-    const dt=exif.DateTimeOriginal||exif.CreateDate||exif.ModifyDate;
-    if(dt instanceof Date){exifDate=dt;dateInput.value=localInputDate(dt)}
-    if(Number.isFinite(exif.latitude)&&Number.isFinite(exif.longitude)){
-      setCoords(exif.latitude,exif.longitude);setStatus("Koordinat GPS ditemukan dari metadata foto.");await reverseAddress(exif.latitude,exif.longitude);await getElevation(exif.latitude,exif.longitude);
-    }else{render();setStatus("Foto siap. Gunakan tombol Ambil lokasi saya untuk menambahkan GPS, alamat, dan peta.");}
-    render();URL.revokeObjectURL(url);
-  }catch(err){setStatus("Foto gagal dibaca: "+err.message)}
+
+$("photoInput").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setStatus("File harus berupa gambar.");
+    return;
+  }
+
+  photoFile = file;
+  setStatus("Memuat foto dan membaca metadata…");
+
+  try {
+    // Membaca foto menggunakan FileReader
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Gagal membaca file foto."));
+      reader.readAsDataURL(file);
+    });
+
+    // Memuat gambar menggunakan Image()
+    photo = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Format foto tidak dapat dibaca."));
+      img.src = dataUrl;
+    });
+
+    if (!photo.naturalWidth || !photo.naturalHeight) {
+      throw new Error("Ukuran foto tidak valid.");
+    }
+
+    $("emptyState").style.display = "none";
+    canvas.style.display = "block";
+
+    $("orientationTag").textContent =
+      photo.naturalWidth >= photo.naturalHeight
+        ? "Landscape"
+        : "Portrait";
+
+    // Membaca metadata EXIF
+    let exif = {};
+    try {
+      exif = await exifr.parse(file, {
+        gps: true,
+        exif: true
+      }) || {};
+    } catch (err) {
+      console.warn("Metadata EXIF tidak tersedia:", err);
+    }
+
+    const dt = exif.DateTimeOriginal ||
+               exif.CreateDate ||
+               exif.ModifyDate;
+
+    if (dt instanceof Date) {
+      exifDate = dt;
+      dateInput.value = localInputDate(dt);
+    }
+
+    if (
+      Number.isFinite(exif.latitude) &&
+      Number.isFinite(exif.longitude)
+    ) {
+      setCoords(exif.latitude, exif.longitude);
+
+      setStatus("Koordinat GPS ditemukan dari metadata foto.");
+
+      await reverseAddress(
+        exif.latitude,
+        exif.longitude
+      );
+
+      await getElevation(
+        exif.latitude,
+        exif.longitude
+      );
+    } else {
+      render();
+      setStatus(
+        "Foto siap. Gunakan tombol Ambil lokasi saya untuk menambahkan GPS, alamat, dan peta."
+      );
+    }
+
+    render();
+    enableDownload();
+
+  } catch (err) {
+    console.error("Kesalahan pemuatan foto:", err);
+    photo = null;
+    canvas.style.display = "none";
+    $("emptyState").style.display = "block";
+    enableDownload();
+    setStatus("Foto gagal dibaca: " + err.message);
+  }
 });
 function roundedRect(c,x,y,w,h,r,fill){c.beginPath();c.roundRect(x,y,w,h,r);if(fill)c.fill()}
 function drawMapImage(){/* Map preview is captured separately from the live Leaflet panel during export. */}
 function render(){
  if(!photo)return;
- const w=photo.width,h=photo.height;canvas.width=w;canvas.height=h;
+ const w=photo.naturalWidth || photo.width;
+const h=photo.naturalHeight || photo.height;canvas.width=w;canvas.height=h;
  ctx.drawImage(photo,0,0,w,h);
  const scale=w/900,short=Math.min(w,h),pad=Math.max(14,short*.025),font=Math.max(14,short*.034);
  const date=dateInput.value?new Date(dateInput.value):new Date();
