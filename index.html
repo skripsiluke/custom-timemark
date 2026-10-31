@@ -139,7 +139,7 @@ function draw(){
  // Side watermark and LA branding
  ctx.save();ctx.translate(W-margin*.45,H*.58);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText(val('watermark'),0,0);ctx.restore();
  ctx.textAlign='right';ctx.fillStyle='#ffc247';ctx.font=`bold ${Math.max(18,23*sc)}px Arial`;ctx.fillText(val('brand'),W-margin,H-margin-lineH*.25);
- ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText('Foto dokumentasi',W-margin,H-margin+lineH*.45);
+ ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText('Foto dokumentasi',W-margin,H-margin-lineH*.7);
 }
 function validCoords(){const lat=Number(val('lat')),lon=Number(val('lon'));return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180}
 function scheduleAddress(){
