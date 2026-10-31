@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Custom Timemark</title>
+<title>LA Timemark</title>
 <style>
 :root{--accent:#ff5a1f;--ink:#17202a;--muted:#687386}
 *{box-sizing:border-box}body{margin:0;background:#f2f4f7;color:var(--ink);font:15px/1.45 system-ui,Segoe UI,Arial,sans-serif}
@@ -29,7 +29,7 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
 </style>
 </head>
 <body>
-<header><div><h1>Custom Timemark</h1><p>Tambahkan timestamp lokasi dan kegiatan pada foto</p></div><span style="font-size:12px;color:#cbd5e1">Versi 1.0 · GitHub Pages</span></header>
+<header><div><h1>LA Timemark</h1><p>Tambahkan timestamp lokasi dan kegiatan pada foto</p></div><span style="font-size:12px;color:#cbd5e1">Versi 1.2 · GitHub Pages</span></header>
 <main>
 <section class="panel">
   <h2>Pengaturan Timestamp</h2>
@@ -37,25 +37,25 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
     <label>Foto utama</label><input id="photo" type="file" accept="image/*">
     <div class="two">
       <div><label>Logo instansi (opsional)</label><input id="logo" type="file" accept="image/*"></div>
-      <div><label>Gambar peta mini (opsional)</label><input id="map" type="file" accept="image/*"></div>
+      <div><label>Status peta mini</label><input id="mapStatus" value="Menunggu koordinat" readonly></div>
     </div>
   </div>
   <div class="group">
     <label>Judul kegiatan</label><input id="title" value="Kunjungan Lapangan">
     <div class="two">
-      <div><label>Tanggal</label><input id="date" type="date" value="2026-10-31"></div>
-      <div><label>Jam</label><input id="time" type="time" value="07:08"></div>
+      <div><label>Tanggal</label><input id="date" type="date"></div>
+      <div><label>Jam</label><input id="time" type="time"></div>
     </div>
-    <label>Alamat / lokasi</label><textarea id="address">Aweh, Kec. Kalanganyar, Kabupaten Lebak, Banten 42312</textarea>
+    <label>Alamat / lokasi</label><textarea id="address" placeholder="Masukkan alamat atau nama lokasi">Aweh, Kec. Kalanganyar, Kabupaten Lebak, Banten 42312</textarea>
   </div>
   <div class="group">
     <div class="two">
-      <div><label>Arah kompas (otomatis dari sensor HP)</label><input id="bearing" value="--" readonly></div>
+      <div><label>Arah kompas (sensor HP)</label><input id="bearing" value="--" readonly></div>
       <div><label>Arah mata angin</label><input id="direction" value="--" readonly></div>
     </div>
     <div class="two">
-      <div><label>Ketinggian tanah (otomatis dari koordinat)</label><input id="altitude" value="--" readonly></div>
-      <div><label>Status data</label><input id="sensorStatus" value="Menunggu koordinat dan sensor" readonly></div>
+      <div><label>Ketinggian tanah (otomatis)</label><input id="altitude" value="--" readonly></div>
+      <div><label>Status GPS / sensor</label><input id="sensorStatus" value="Menunggu koordinat" readonly></div>
     </div>
     <div class="two">
       <div><label>Latitude</label><input id="lat" value="-6.365782"></div>
@@ -68,13 +68,13 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
     </div>
   </div>
   <div class="group">
-    <label>Watermark vertikal</label><input id="watermark" value="CUSTOM TIMEMARK VERIFIED">
+    <label>Watermark vertikal</label><input id="watermark" value="LA TIMEMARK VERIFIED">
     <div class="two">
-      <div><label>Nama aplikasi</label><input id="brand" value="Custom Timemark"></div>
+      <div><label>Nama aplikasi</label><input id="brand" value="LA timemark"></div>
       <div><label>Warna aksen</label><input id="accent" type="color" value="#ff5a1f"></div>
     </div>
     <div class="two">
-      <div><label>Transparansi panel (0–100%)</label><input id="opacity" type="range" min="20" max="95" value="68"></div>
+      <div><label>Transparansi panel</label><input id="opacity" type="range" min="20" max="95" value="68"></div>
       <div><label>Ukuran teks</label><select id="scale"><option value="1">Normal</option><option value="0.85">Kecil</option><option value="1.15">Besar</option></select></div>
     </div>
   </div>
@@ -84,92 +84,112 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
   </div>
 </section>
 <section class="preview">
-  <div class="preview-head"><strong>Pratinjau hasil</strong><span class="hint">Foto asli tidak diubah sampai diekspor</span></div>
+  <div class="preview-head"><strong>Pratinjau hasil</strong><span class="hint" id="orientationLabel">Orientasi mengikuti foto</span></div>
   <div class="stage"><canvas id="canvas" width="900" height="1200"></canvas></div>
-  <p class="note">Catatan: koordinat, arah kompas, dan ketinggian dapat diisi manual. Tombol GPS mengambil lokasi perangkat jika browser memberi izin. Peta mini dan logo dapat diunggah sendiri. Data yang ditampilkan adalah data yang Anda masukkan, bukan verifikasi otomatis lokasi foto.</p>
+  <p class="note">Peta mini menggunakan OpenStreetMap berdasarkan koordinat yang dimasukkan. Peta memerlukan koneksi internet. Foto diproses di browser dan tidak dikirim ke server. Elevasi merupakan estimasi data medan; kompas mengikuti sensor perangkat jika tersedia. Arah kompas tidak dapat ditentukan hanya dari satu koordinat.</p>
 </section>
 </main>
 <script>
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d');
-let photo=null,logo=null,mapImg=null;
-function loadFile(file,cb){if(!file)return;const img=new Image();img.onload=()=>cb(img);img.src=URL.createObjectURL(file)}
-$('photo').onchange=e=>loadFile(e.target.files[0],img=>{photo=img;draw()});
-$('logo').onchange=e=>loadFile(e.target.files[0],img=>{logo=img;draw()});
-$('map').onchange=e=>loadFile(e.target.files[0],img=>{mapImg=img;draw()});
+let photo=null,logo=null,mapCanvas=null,mapKey='',mapTimer=null,elevationTimer=null,elevationRequest=0;
+const tileCache=new Map();
 function val(id){return $(id).value}
+function loadFile(file,cb){if(!file)return;const url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{cb(img);URL.revokeObjectURL(url)};img.onerror=()=>URL.revokeObjectURL(url);img.src=url}
+$('photo').onchange=e=>loadFile(e.target.files[0],img=>{photo=img;$('orientationLabel').textContent=img.width>=img.height?'Landscape · '+img.width+' × '+img.height:'Portrait · '+img.width+' × '+img.height;draw()});
+$('logo').onchange=e=>loadFile(e.target.files[0],img=>{logo=img;draw()});
 function roundedRect(x,y,w,h,r,fill){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill()}
-function fitImage(img,x,y,w,h){const s=Math.max(w/img.width,h/img.height),sw=w/s,sh=h/s,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);ctx.restore()}
-function fmtDate(){if(!val('date'))return '';let d=new Date(val('date')+'T00:00:00');return new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(d)}
+function fitImage(img,x,y,w,h){const s=Math.max(w/img.width,h/img.height),sw=w/s,sh=h/s,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.save();ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(12,w*.04));ctx.clip();ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);ctx.restore()}
+function fmtDate(){if(!val('date'))return '';const d=new Date(val('date')+'T00:00:00');return new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(d)}
+function wrapText(text,context,font,maxWidth){context.font=font;let words=(text||'').split(/\s+/),lines=[],line='';for(const word of words){const test=line?line+' '+word:word;if(context.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line);return lines}
 function draw(){
- const W=900,H=1200;canvas.width=W;canvas.height=H;
- if(photo){const s=Math.max(W/photo.width,H/photo.height);const sw=W/s,sh=H/s;ctx.drawImage(photo,(photo.width-sw)/2,(photo.height-sh)/2,sw,sh,0,0,W,H)}
- else{ctx.fillStyle='#858585';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.font='32px sans-serif';ctx.textAlign='center';ctx.fillText('Pilih foto untuk memulai',W/2,H/2)}
- const accent=val('accent'),a=Number(val('opacity'))/100,sc=Number(val('scale'));
- const panel=`rgba(18,22,28,${a})`,white='#fff';
- // Top left compass and altitude chips
+ const W=photo?photo.naturalWidth:900,H=photo?photo.naturalHeight:1200;
+ canvas.width=W;canvas.height=H;
+ if(photo)ctx.drawImage(photo,0,0,W,H);
+ else{ctx.fillStyle='#858585';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.font='32px Arial';ctx.textAlign='center';ctx.fillText('Pilih foto untuk memulai',W/2,H/2)}
+ const unit=Math.max(0.65,Math.min(W/900,H/700)),sc=unit*Number(val('scale'));
+ const margin=Math.max(14,Math.round(Math.min(W,H)*.025)),accent=val('accent'),panel=`rgba(18,22,28,${Number(val('opacity'))/100})`,white='#fff';
+ // Top data panels; sizing adapts to portrait and landscape
  ctx.textAlign='left';ctx.textBaseline='middle';
- roundedRect(22,20,235,58,9,accent);
- ctx.fillStyle=white;ctx.font=`bold ${30*sc}px Arial`;ctx.fillText(`◉ ${val('bearing')}° ${val('direction')}`,42,50);
- roundedRect(275,20,210,58,9,panel);
- ctx.font=`bold ${29*sc}px Arial`;ctx.fillText(`▲ ${val('altitude')} m`,298,50);
- roundedRect(22,91,600,58,8,panel);
- ctx.font=`${27*sc}px Arial`;ctx.fillText(`● ${val('lat')}°, ${val('lon')}°`,43,121);
- // Mini map top right
- const mx=690,my=22,mw=188,mh=188;
- ctx.save();ctx.beginPath();ctx.roundRect(mx,my,mw,mh,10);ctx.clip();
- if(mapImg)fitImage(mapImg,mx,my,mw,mh);else{
-  ctx.fillStyle='#a9b8a1';ctx.fillRect(mx,my,mw,mh);
-  ctx.strokeStyle='#e8e4d7';ctx.lineWidth=12;
-  for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(mx-20,my+30+i*42);ctx.lineTo(mx+mw+20,my+5+i*38);ctx.stroke()}
-  ctx.strokeStyle='#839b86';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(mx+15,my+155);ctx.quadraticCurveTo(mx+90,my+80,mx+180,my+135);ctx.stroke();
-  ctx.fillStyle='#287fd1';ctx.beginPath();ctx.arc(mx+96,my+75,16,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='white';ctx.beginPath();ctx.arc(mx+96,my+75,6,0,Math.PI*2);ctx.fill();
- }
- ctx.restore();ctx.strokeStyle='white';ctx.lineWidth=5;ctx.strokeRect(mx,my,mw,mh);
- // Lower translucent gradient for legibility
- const grad=ctx.createLinearGradient(0,650,0,H);grad.addColorStop(0,'rgba(0,0,0,0)');grad.addColorStop(.3,'rgba(0,0,0,.22)');grad.addColorStop(1,'rgba(0,0,0,.68)');ctx.fillStyle=grad;ctx.fillRect(0,620,W,580);
- // Logo
- if(logo){const max=80,s=Math.min(max/logo.width,max/logo.height);ctx.drawImage(logo,22,820,logo.width*s,logo.height*s)}
- else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(70,865,42,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(70,865,34,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.fillText('✿',70,876)}
- // Title and details
- const left=22,base=945;
- ctx.textAlign='left';ctx.fillStyle=white;ctx.font=`bold ${35*sc}px Arial`;ctx.fillText(val('title'),left,base);
- ctx.fillStyle=accent;ctx.fillRect(left,990,6,130);
- ctx.fillStyle=white;ctx.font=`${27*sc}px Arial`;ctx.fillText(`${fmtDate()} ${val('time')}`,left+24,1010);
- const lines=wrapText(val('address'),ctx,`${27*sc}px Arial`,W-100);
- ctx.font=`${27*sc}px Arial`;lines.slice(0,3).forEach((line,i)=>ctx.fillText(line,left+24,1070+i*34));
- // Vertical watermark
- ctx.save();ctx.translate(884,720);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.9)';ctx.font='18px Arial';ctx.fillText(val('watermark'),0,0);ctx.restore();
- // Branding bottom right
- ctx.textAlign='right';ctx.fillStyle='#ffc247';ctx.font=`bold ${24*sc}px Arial`;ctx.fillText(val('brand'),875,1160);
- ctx.fillStyle='rgba(255,255,255,.8)';ctx.font='17px Arial';ctx.fillText('Dokumentasi foto',875,1185);
+ const f1=27*sc,f2=25*sc,pad=14*sc,chipH=48*sc;
+ ctx.font=`bold ${f1}px Arial`;const compassText=`◉ ${val('bearing')}° ${val('direction')}`;const cw=Math.max(160*sc,ctx.measureText(compassText).width+pad*2);
+ ctx.font=`bold ${f2}px Arial`;const altText=`▲ ${val('altitude')} m`;const aw=ctx.measureText(altText).width+pad*2;
+ roundedRect(margin,margin,cw,chipH,8*sc,accent);ctx.fillStyle=white;ctx.font=`bold ${f1}px Arial`;ctx.fillText(compassText,margin+pad,margin+chipH/2);
+ roundedRect(margin+cw+10*sc,margin,aw,chipH,8*sc,panel);ctx.font=`bold ${f2}px Arial`;ctx.fillText(altText,margin+cw+10*sc+pad,margin+chipH/2);
+ const coord=`● ${val('lat')}°, ${val('lon')}°`;ctx.font=`${f2}px Arial`;const coordW=Math.min(W-margin*2,Math.max(270*sc,ctx.measureText(coord).width+pad*2));
+ roundedRect(margin,margin+chipH+10*sc,coordW,chipH,8*sc,panel);ctx.fillStyle=white;ctx.fillText(coord,margin+pad,margin+chipH+10*sc+chipH/2);
+ // Coordinate-linked mini map (actual OSM tile imagery)
+ const mapSize=Math.min(W*.25,H*.25,230*sc);const mapX=W-margin-mapSize,mapY=margin;
+ if(mapCanvas){fitImage(mapCanvas,mapX,mapY,mapSize,mapSize)}
+ else{roundedRect(mapX,mapY,mapSize,mapSize,9*sc,'#879887');ctx.fillStyle='white';ctx.font=`${12*sc}px Arial`;ctx.textAlign='center';ctx.fillText('Memuat peta…',mapX+mapSize/2,mapY+mapSize/2);ctx.textAlign='left'}
+ ctx.strokeStyle='white';ctx.lineWidth=Math.max(2,3*sc);ctx.strokeRect(mapX,mapY,mapSize,mapSize);
+ // Dark gradient for lower text legibility
+ const lowerTop=H*.60,grad=ctx.createLinearGradient(0,lowerTop,0,H);grad.addColorStop(0,'rgba(0,0,0,0)');grad.addColorStop(.25,'rgba(0,0,0,.28)');grad.addColorStop(1,'rgba(0,0,0,.72)');ctx.fillStyle=grad;ctx.fillRect(0,lowerTop,W,H-lowerTop);
+ // Bottom content scales with actual image dimensions
+ const bottomFont=Math.max(19,Math.min(36*sc,W*.045)),lineH=bottomFont*1.28;
+ const titleY=H-margin-(lineH*3.3);
+ const logoSize=Math.min(78*sc,W*.12,H*.10);
+ if(logo){const s=Math.min(logoSize/logo.width,logoSize/logo.height);ctx.drawImage(logo,margin,titleY-logoSize-18*sc,logo.width*s,logo.height*s)}
+ else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize/2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize*.40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font=`bold ${logoSize*.55}px Arial`;ctx.textAlign='center';ctx.fillText('✿',margin+logoSize/2,titleY-logoSize/2-18*sc+logoSize*.12)}
+ ctx.textAlign='left';ctx.fillStyle=white;ctx.font=`bold ${bottomFont*1.12}px Arial`;ctx.fillText(val('title'),margin,titleY);
+ const detailX=margin+bottomFont*.9,detailY=titleY+lineH*1.15;
+ ctx.fillStyle=accent;ctx.fillRect(margin,detailY-lineH*.55,Math.max(4,5*sc),lineH*2.9);
+ ctx.fillStyle=white;ctx.font=`${bottomFont*.86}px Arial`;ctx.fillText(`${fmtDate()} ${val('time')}`,detailX,detailY);
+ const maxTextW=W-margin*2-bottomFont*5;const addressLines=wrapText(val('address'),ctx,`${bottomFont*.86}px Arial`,maxTextW).slice(0,3);
+ addressLines.forEach((line,i)=>ctx.fillText(line,detailX,detailY+lineH*(1.45+i)));
+ // Side watermark and LA branding
+ ctx.save();ctx.translate(W-margin*.45,H*.58);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText(val('watermark'),0,0);ctx.restore();
+ ctx.textAlign='right';ctx.fillStyle='#ffc247';ctx.font=`bold ${Math.max(18,23*sc)}px Arial`;ctx.fillText(val('brand'),W-margin,H-margin-lineH*.25);
+ ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText('Foto dokumentasi',W-margin,H-margin+lineH*.45);
 }
-function wrapText(text,context,font,maxWidth){context.font=font;let words=text.split(/\s+/),lines=[],line='';for(const word of words){let test=line?line+' '+word:word;if(context.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line);return lines}
-document.querySelectorAll('input,textarea,select').forEach(el=>{if(!['file','range'].includes(el.type))el.addEventListener('input',draw);else el.addEventListener('change',draw)});
-$('opacity').addEventListener('input',draw);$('scale').addEventListener('change',draw);
-let elevationTimer=null, elevationRequest=0;
-function compassName(deg){const dirs=['N','NE','E','SE','S','SW','W','NW'];return dirs[Math.round(deg/45)%8]}
+function validCoords(){const lat=Number(val('lat')),lon=Number(val('lon'));return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180}
+function scheduleElevation(){clearTimeout(elevationTimer);elevationTimer=setTimeout(updateElevation,500)}
 async function updateElevation(){
- const lat=Number(val('lat')),lon=Number(val('lon'));
- if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
- const request=++elevationRequest;$('sensorStatus').value='Mengambil elevasi…';
- try{
-  const url=`https://api.open-meteo.com/v1/elevation?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`;
-  const response=await fetch(url);if(!response.ok)throw new Error('Layanan elevasi tidak merespons');
-  const data=await response.json();if(request!==elevationRequest)return;
-  if(!Array.isArray(data.elevation)||!Number.isFinite(data.elevation[0]))throw new Error('Data elevasi tidak tersedia');
-  $('altitude').value=Number(data.elevation[0]).toFixed(1);$('sensorStatus').value='Elevasi diperbarui';draw();
- }catch(err){if(request===elevationRequest){$('sensorStatus').value='Elevasi gagal diambil';console.warn(err)}}
+ if(!validCoords())return;const request=++elevationRequest,lat=Number(val('lat')),lon=Number(val('lon'));$('sensorStatus').value='Mengambil elevasi…';
+ try{const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(request!==elevationRequest)return;if(!Number.isFinite(j.elevation?.[0]))throw Error('Data elevasi kosong');$('altitude').value=Number(j.elevation[0]).toFixed(1);$('sensorStatus').value='Elevasi diperbarui';draw()}catch(e){if(request===elevationRequest)$('sensorStatus').value='Elevasi tidak tersedia'}
 }
-function scheduleElevation(){clearTimeout(elevationTimer);elevationTimer=setTimeout(updateElevation,650)}
-$('lat').addEventListener('input',scheduleElevation);$('lon').addEventListener('input',scheduleElevation);
-$('gps').onclick=()=>{if(!navigator.geolocation){alert('Browser tidak mendukung GPS.');return} $('sensorStatus').value='Mengambil GPS…';navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(6);$('lon').value=p.coords.longitude.toFixed(6);scheduleElevation();draw()},e=>{ $('sensorStatus').value='GPS gagal';alert('Lokasi tidak berhasil diambil: '+e.message)},{enableHighAccuracy:true,timeout:15000})};
-function handleOrientation(event){let heading=null;if(typeof event.webkitCompassHeading==='number')heading=event.webkitCompassHeading;else if(event.absolute&&typeof event.alpha==='number')heading=(360-event.alpha)%360;if(heading===null||!Number.isFinite(heading))return;heading=(heading+360)%360;$('bearing').value=String(Math.round(heading));$('direction').value=compassName(heading);$('sensorStatus').value='Kompas aktif';draw()}
-$('compass').onclick=async()=>{try{if(typeof DeviceOrientationEvent==='undefined'){alert('Sensor kompas tidak didukung browser/perangkat ini.');return}if(typeof DeviceOrientationEvent.requestPermission==='function'){const permission=await DeviceOrientationEvent.requestPermission();if(permission!=='granted'){alert('Izin sensor orientasi tidak diberikan.');return}}window.addEventListener('deviceorientation',handleOrientation,true);window.addEventListener('deviceorientationabsolute',handleOrientation,true);$('sensorStatus').value='Menunggu sensor kompas…'}catch(e){alert('Kompas tidak dapat diaktifkan: '+e.message)}};
+function lon2tile(lon,z){return (lon+180)/360*Math.pow(2,z)}
+function lat2tile(lat,z){const r=lat*Math.PI/180;return (1-Math.asinh(Math.tan(r))/Math.PI)/2*Math.pow(2,z)}
+async function getTile(x,y,z){
+ const n=Math.pow(2,z);x=(x%n+n)%n;if(y<0||y>=n)throw Error('Tile di luar batas');const key=`${z}/${x}/${y}`;
+ if(tileCache.has(key))return tileCache.get(key);
+ const promise=new Promise((resolve,reject)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>resolve(im);im.onerror=()=>reject(Error('Tile peta gagal dimuat'));im.src=`https://tile.openstreetmap.org/${z}/${x}/${y}.png`});
+ tileCache.set(key,promise);try{return await promise}catch(e){tileCache.delete(key);throw e}
+}
+async function updateMap(){
+ if(!validCoords())return;const lat=Number(val('lat')),lon=Number(val('lon')),z=16,key=`${lat.toFixed(6)},${lon.toFixed(6)},${val('bearing')}`;
+ if(key===mapKey&&mapCanvas)return;mapKey=key;$('mapStatus').value='Memuat peta…';
+ try{
+  const size=384,n=Math.pow(2,z),cx=lon2tile(lon,z),cy=lat2tile(lat,z),centerX=Math.floor(cx),centerY=Math.floor(cy),fracX=cx-centerX,fracY=cy-centerY;
+  const startX=centerX-1,startY=centerY-1,tiles=[];
+  for(let dy=0;dy<3;dy++)for(let dx=0;dx<3;dx++)tiles.push({dx,dy,img:await getTile(startX+dx,startY+dy,z)});
+  if(key!==mapKey)return;
+  const c=document.createElement('canvas');c.width=size;c.height=size;const g=c.getContext('2d');
+  tiles.forEach(t=>g.drawImage(t.img,t.dx*128-fracX*128+128,t.dy*128-fracY*128+128,128,128));
+  const px=size/2,py=size/2;
+  // Direction cone is displayed only when a valid compass heading exists.
+  const heading=Number(val('bearing'));
+  if(Number.isFinite(heading)&&val('bearing')!=='--'){
+   const rad=(heading-90)*Math.PI/180;g.fillStyle='rgba(0,210,135,.48)';g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(rad-.42)*105,py+Math.sin(rad-.42)*105);g.arc(px,py,105,rad-.42,rad+.42);g.closePath();g.fill();
+  }
+  g.fillStyle='#1689ed';g.beginPath();g.arc(px,py-8,19,0,Math.PI*2);g.fill();g.beginPath();g.moveTo(px-13,py+5);g.lineTo(px,py+28);g.lineTo(px+13,py+5);g.closePath();g.fill();g.fillStyle='white';g.beginPath();g.arc(px,py-8,7,0,Math.PI*2);g.fill();
+  g.fillStyle='rgba(0,0,0,.65)';g.fillRect(0,size-23,100,23);g.fillStyle='white';g.font='14px Arial';g.fillText('© OpenStreetMap',6,size-7);
+  mapCanvas=c;$('mapStatus').value='Peta sesuai koordinat';draw();
+ }catch(e){if(key===mapKey){$('mapStatus').value='Peta gagal dimuat';console.warn(e);draw()}}
+}
+function scheduleMap(){clearTimeout(mapTimer);mapKey='';mapTimer=setTimeout(updateMap,450)}
+$('lat').addEventListener('input',()=>{scheduleElevation();scheduleMap();draw()});
+$('lon').addEventListener('input',()=>{scheduleElevation();scheduleMap();draw()});
+function compassName(deg){return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]}
+function handleOrientation(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;else if(e.absolute&&typeof e.alpha==='number')h=(360-e.alpha)%360;if(h===null||!Number.isFinite(h))return;h=(h+360)%360;$('bearing').value=String(Math.round(h));$('direction').value=compassName(h);$('sensorStatus').value='Kompas aktif';scheduleMap();draw()}
+$('gps').onclick=()=>{if(!navigator.geolocation){alert('Browser tidak mendukung GPS.');return}$('sensorStatus').value='Mengambil GPS…';navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(6);$('lon').value=p.coords.longitude.toFixed(6);scheduleElevation();scheduleMap();draw()},e=>{ $('sensorStatus').value='GPS gagal';alert('Lokasi tidak berhasil diambil: '+e.message)},{enableHighAccuracy:true,timeout:20000})};
+$('compass').onclick=async()=>{try{if(typeof DeviceOrientationEvent==='undefined')throw Error('Sensor orientasi tidak didukung');if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw Error('Izin sensor tidak diberikan')}window.addEventListener('deviceorientation',handleOrientation,true);window.addEventListener('deviceorientationabsolute',handleOrientation,true);$('sensorStatus').value='Menunggu sensor kompas…'}catch(e){alert('Kompas tidak dapat diaktifkan: '+e.message)}};
 $('now').onclick=()=>{const d=new Date();$('date').value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');$('time').value=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');draw()};
-$('download').onclick=()=>{if(!photo){alert('Pilih foto terlebih dahulu.');return}const link=document.createElement('a');link.download='foto-timestamp.jpg';link.href=canvas.toDataURL('image/jpeg',.94);link.click()};
+document.querySelectorAll('input:not([type=file]),textarea,select').forEach(el=>{if(!['lat','lon','opacity'].includes(el.id))el.addEventListener('input',draw);el.addEventListener('change',draw)});
+$('opacity').addEventListener('input',draw);$('scale').addEventListener('change',draw);
+$('download').onclick=()=>{if(!photo){alert('Pilih foto terlebih dahulu.');return}try{const a=document.createElement('a');a.download='LA-timemark.jpg';a.href=canvas.toDataURL('image/jpeg',.95);a.click()}catch(e){alert('Gagal mengekspor foto. Pastikan peta telah selesai dimuat, lalu coba lagi.')}};
 $('reset').onclick=()=>{if(confirm('Reset seluruh pengaturan?'))location.reload()};
-draw();
-updateElevation();
+const now=new Date();$('date').value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');$('time').value=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+draw();updateElevation();updateMap();
 </script>
-</body></html>
+</body>
+</html>
