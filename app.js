@@ -124,23 +124,62 @@ function render(){
  ctx.textAlign="right";ctx.font=`700 ${font*.9}px Arial`;ctx.fillStyle="#ffbf37";ctx.fillText("LA Photo Timemark",w-pad,h-pad-font*.7);ctx.font=`500 ${font*.66}px Arial`;ctx.fillStyle="#eee";ctx.fillText("Foto dengan informasi lokasi",w-pad,h-pad);ctx.textAlign="left";
 }
 function wrapText(c,text,max){const words=String(text).split(/\s+/),lines=[];let line="";for(const word of words){const test=line?line+" "+word:word;if(c.measureText(test).width>max&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line);return lines}
-function scheduleMapCapture(){if(mapCaptureBusy)return;mapCaptureBusy=true;setTimeout(async()=>{
- try{
-   if(window.html2canvas){const shot=await html2canvas($("map"),{useCORS:true,scale:1,backgroundColor:"#252a31",logging:false});mapSnapshot=shot;render();}
- }catch(e){console.warn("Mini map belum dapat dirender",e)}
- finally{mapCaptureBusy=false}
- },450)}
+function scheduleMapCapture(){
+ if(mapCaptureBusy)return;
+ mapCaptureBusy=true;
+ setTimeout(async()=>{
+   try{
+     if(window.html2canvas){
+       const shot=await html2canvas($("map"),{
+         useCORS:true,allowTaint:false,scale:1,backgroundColor:"#252a31",
+         logging:false,ignoreElements:el=>el.classList?.contains("leaflet-control")
+       });
+       // Do not put a tainted canvas onto the final photo canvas; that blocks JPG export.
+       try{shot.getContext("2d").getImageData(0,0,1,1);mapSnapshot=shot;}
+       catch(err){mapSnapshot=null;console.warn("Peta tidak mengizinkan ekspor lintas-domain; mini map hanya tampil di layar.",err)}
+       render();
+     }
+   }catch(e){mapSnapshot=null;console.warn("Mini map capture gagal:",e)}
+   finally{mapCaptureBusy=false}
+ },650);
+}
 async function download(){
- if(!photo)return;
- setStatus("Menyiapkan foto final dan peta mini…");
+ if(!photo){setStatus("Pilih foto terlebih dahulu.");return}
+ setStatus("Menyiapkan foto JPG…");
  try{
+   // Refresh mini map only when it can be safely copied into the photo canvas.
    if(coords&&window.html2canvas){
-     const shot=await html2canvas($("map"),{useCORS:true,scale:1,backgroundColor:"#252a31",logging:false});
-     mapSnapshot=shot;
+     try{
+       const shot=await html2canvas($("map"),{
+         useCORS:true,allowTaint:false,scale:1,backgroundColor:"#252a31",
+         logging:false,ignoreElements:el=>el.classList?.contains("leaflet-control")
+       });
+       shot.getContext("2d").getImageData(0,0,1,1);
+       mapSnapshot=shot;
+     }catch(mapErr){
+       mapSnapshot=null;
+       console.warn("Mini map dilewati saat ekspor karena batasan CORS:",mapErr);
+     }
    }
- }catch(e){console.warn("Peta tidak dapat diambil",e)}
- render();
- const a=document.createElement("a");a.download=`LA-Photo-Timemark-${Date.now()}.jpg`;a.href=canvas.toDataURL("image/jpeg",.94);a.click();setStatus("Foto berhasil disiapkan untuk diunduh.");
+   render();
+   const mime="image/jpeg";
+   // Use toBlob instead of toDataURL: it is more memory-efficient for large phone photos.
+   canvas.toBlob(blob=>{
+     if(!blob){setStatus("Browser gagal membuat JPG. Coba foto berukuran lebih kecil atau gunakan Chrome terbaru.");return}
+     const url=URL.createObjectURL(blob);
+     const a=document.createElement("a");
+     a.href=url;
+     a.download=`LA-Photo-Timemark-${Date.now()}.jpg`;
+     document.body.appendChild(a);
+     a.click();
+     a.remove();
+     setTimeout(()=>URL.revokeObjectURL(url),30000);
+     setStatus("JPG berhasil dibuat. Jika unduhan tidak muncul, izinkan unduhan otomatis pada browser.");
+   },mime,.94);
+ }catch(err){
+   console.error(err);
+   setStatus("Gagal membuat foto: "+(err?.message||"kesalahan tidak diketahui")+". Coba muat ulang halaman dan unggah foto kembali.");
+ }
 }
 function enableDownload(){ $("downloadBtn").disabled=!photo }
 const originalRender=render;render=function(){originalRender();enableDownload()};
