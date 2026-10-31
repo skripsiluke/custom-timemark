@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const canvas=$("preview"),ctx=canvas.getContext("2d");
-let photo=null,photoFile=null,coords=null,map=null,marker=null,compassText="",altitudeValue=null,exifDate=null;
+let photo=null,photoFile=null,coords=null,map=null,marker=null,compassText="",altitudeValue=null,exifDate=null,logoImage=null,mapSnapshot=null,mapCaptureBusy=false;
 const dateInput=$("dateTime");
 function localInputDate(d=new Date()){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,16)}
 dateInput.value=localInputDate();
@@ -20,7 +20,7 @@ if("DeviceOrientationEvent" in window){
 
 function initMap(){map=L.map("map",{zoomControl:true,scrollWheelZoom:false}).setView([-6.2,106.8],9);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap",crossOrigin:true}).addTo(map)}
 initMap();
-function setCoords(lat,lon,zoom=17){coords={lat:Number(lat),lon:Number(lon)};$("lat").value=coords.lat.toFixed(6);$("lon").value=coords.lon.toFixed(6);$("coordLabel").textContent=`${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`;map.setView([coords.lat,coords.lon],zoom);if(marker)marker.setLatLng([coords.lat,coords.lon]);else marker=L.marker([coords.lat,coords.lon]).addTo(map);render()}
+function setCoords(lat,lon,zoom=17){coords={lat:Number(lat),lon:Number(lon)};$("lat").value=coords.lat.toFixed(6);$("lon").value=coords.lon.toFixed(6);$("coordLabel").textContent=`${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`;map.setView([coords.lat,coords.lon],zoom);if(marker)marker.setLatLng([coords.lat,coords.lon]);else marker=L.marker([coords.lat,coords.lon]).addTo(map);render();scheduleMapCapture()}
 async function reverseAddress(lat,lon){
   try{
     const u=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
@@ -56,6 +56,10 @@ $("applyBtn").addEventListener("click",async()=>{const lat=parseFloat($("lat").v
 ["caption","dateTime","compass","altitude","address"].forEach(id=>$(id).addEventListener("input",render));
 $("lat").addEventListener("change",()=>{});$("lon").addEventListener("change",()=>{});
 
+$("logoInput").addEventListener("change",e=>{
+ const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")){setStatus("Logo harus berupa file gambar.");return}
+ const u=URL.createObjectURL(f);const im=new Image();im.onload=()=>{logoImage=im;$("logoThumb").src=u;$("logoThumb").hidden=false;render()};im.onerror=()=>setStatus("Logo tidak dapat dibaca.");im.src=u;
+});
 $("photoInput").addEventListener("change",async e=>{
   const file=e.target.files[0];if(!file)return;if(!file.type.startsWith("image/")){setStatus("File harus berupa gambar.");return}
   photoFile=file;setStatus("Memuat foto dan membaca metadata…");
@@ -95,33 +99,48 @@ function render(){
  if(coords){ctx.font=`500 ${font*.92}px Arial`;ctx.fillStyle="rgba(20,22,25,.7)";const t=`⌖ ${lat}, ${lon}`,tw=ctx.measureText(t).width;roundedRect(ctx,pad,chipY+chipH+font*.22,tw+font*1.2,chipH,font*.15,true);ctx.fillStyle="#fff";ctx.fillText(t,pad+font*.55,chipY+chipH+font*.22+chipH*.69)}
  // Lower logo medallion and copy
  const titleY=h-panelH+font*.5;const logoR=font*1.05;
- ctx.beginPath();ctx.arc(pad+logoR,titleY+logoR,logoR,0,Math.PI*2);ctx.fillStyle="#f5c52f";ctx.fill();ctx.lineWidth=font*.13;ctx.strokeStyle="#fff";ctx.stroke();
- ctx.fillStyle="#277e3d";ctx.font=`900 ${font*.95}px Arial`;ctx.textAlign="center";ctx.fillText("LA",pad+logoR,titleY+logoR+font*.32);ctx.textAlign="left";
- ctx.fillStyle="#fff";ctx.font=`700 ${font*1.35}px Arial`;ctx.fillText(caption,pad,titleY+logoR*2+font*.8);
- ctx.font=`500 ${font*1.02}px Arial`;ctx.fillStyle="#fff";const dateY=titleY+logoR*2+font*2.15;
+ let logoBottom=titleY;
+ if(logoImage){
+   const maxLogo=font*2.25,ratio=Math.min(maxLogo/logoImage.width,maxLogo/logoImage.height);
+   const lw=logoImage.width*ratio,lh=logoImage.height*ratio;
+   ctx.save();ctx.shadowColor="rgba(0,0,0,.35)";ctx.shadowBlur=font*.18;ctx.drawImage(logoImage,pad,titleY,lw,lh);ctx.restore();logoBottom=titleY+lh;
+ }
+ ctx.fillStyle="#fff";ctx.font=`700 ${font*1.35}px Arial`;ctx.fillText(caption,pad,logoBottom+font*1.05);
+ ctx.font=`500 ${font*1.02}px Arial`;ctx.fillStyle="#fff";const dateY=logoBottom+font*2.4;
  ctx.fillStyle="#ff5a25";ctx.fillRect(pad,dateY-font*.8,font*.11,font*3.6);
  ctx.fillStyle="#fff";ctx.fillText(dateText,pad+font*.65,dateY);
  const maxWidth=w-pad*2-font*.8;ctx.font=`500 ${font*.98}px Arial`;
  const lines=wrapText(ctx,addr,maxWidth);lines.slice(0,2).forEach((line,i)=>ctx.fillText(line,pad+font*.65,dateY+font*1.5+i*font*1.3));
+ // Mini map at the upper-right, refreshed from the current coordinate/map viewport.
+ if(mapSnapshot){
+   const mw=Math.min(w*.215,h*.19),mh=mw*.78,mx=w-pad-mw,my=pad;
+   ctx.save();ctx.shadowColor="rgba(0,0,0,.4)";ctx.shadowBlur=font*.25;
+   ctx.fillStyle="#fff";roundedRect(ctx,mx-4,my-4,mw+8,mh+8,font*.2,true);
+   ctx.drawImage(mapSnapshot,mx,my,mw,mh);
+   ctx.restore();
+ }
  // right-side vertical watermark
  ctx.save();ctx.translate(w-pad*.55,h*.58);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.font=`500 ${font*.7}px Arial`;ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText("LA Photo Timemark",0,0);ctx.restore();
  ctx.textAlign="right";ctx.font=`700 ${font*.9}px Arial`;ctx.fillStyle="#ffbf37";ctx.fillText("LA Photo Timemark",w-pad,h-pad-font*.7);ctx.font=`500 ${font*.66}px Arial`;ctx.fillStyle="#eee";ctx.fillText("Foto dengan informasi lokasi",w-pad,h-pad);ctx.textAlign="left";
 }
 function wrapText(c,text,max){const words=String(text).split(/\s+/),lines=[];let line="";for(const word of words){const test=line?line+" "+word:word;if(c.measureText(test).width>max&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line);return lines}
+function scheduleMapCapture(){if(mapCaptureBusy)return;mapCaptureBusy=true;setTimeout(async()=>{
+ try{
+   if(window.html2canvas){const shot=await html2canvas($("map"),{useCORS:true,scale:1,backgroundColor:"#252a31",logging:false});mapSnapshot=shot;render();}
+ }catch(e){console.warn("Mini map belum dapat dirender",e)}
+ finally{mapCaptureBusy=false}
+ },450)}
 async function download(){
  if(!photo)return;
- setStatus("Menyiapkan foto final…");
- // Capture live map tiles. If capture fails, photo stamp is still exported.
+ setStatus("Menyiapkan foto final dan peta mini…");
  try{
    if(coords&&window.html2canvas){
-    const mapShot=await html2canvas($("map"),{useCORS:true,scale:1,backgroundColor:"#252a31",logging:false});
-    const mw=Math.round(canvas.width*.22),mh=Math.round(mw*.72),mx=canvas.width-mw-canvas.width*.025,my=canvas.height*.025;
-    ctx.save();ctx.fillStyle="#fff";roundedRect(ctx,mx-4,my-4,mw+8,mh+8,8,true);ctx.drawImage(mapShot,mx,my,mw,mh);ctx.restore();renderStampOverMap();
+     const shot=await html2canvas($("map"),{useCORS:true,scale:1,backgroundColor:"#252a31",logging:false});
+     mapSnapshot=shot;
    }
- }catch(e){console.warn("Peta tidak dapat disatukan:",e)}
+ }catch(e){console.warn("Peta tidak dapat diambil",e)}
+ render();
  const a=document.createElement("a");a.download=`LA-Photo-Timemark-${Date.now()}.jpg`;a.href=canvas.toDataURL("image/jpeg",.94);a.click();setStatus("Foto berhasil disiapkan untuk diunduh.");
 }
-function renderStampOverMap(){/* watermark and footer remain visible; map is placed in top-right */}
-$("downloadBtn").addEventListener("click",download);
 function enableDownload(){ $("downloadBtn").disabled=!photo }
 const originalRender=render;render=function(){originalRender();enableDownload()};
