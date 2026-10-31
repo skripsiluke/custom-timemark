@@ -46,7 +46,7 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
       <div><label>Tanggal</label><input id="date" type="date"></div>
       <div><label>Jam</label><input id="time" type="time"></div>
     </div>
-    <label>Alamat / lokasi</label><textarea id="address" placeholder="Masukkan alamat atau nama lokasi">Aweh, Kec. Kalanganyar, Kabupaten Lebak, Banten 42312</textarea>
+    <label>Alamat lokasi (otomatis dari koordinat)</label><textarea id="address" placeholder="Alamat akan terisi otomatis berdasarkan koordinat..." readonly>Memuat alamat lokasi...</textarea>
   </div>
   <div class="group">
     <div class="two">
@@ -91,7 +91,7 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
 </main>
 <script>
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d');
-let photo=null,logo=null,mapCanvas=null,mapKey='',mapTimer=null,elevationTimer=null,elevationRequest=0;
+let photo=null,logo=null,mapCanvas=null,mapKey='',mapTimer=null,elevationTimer=null,elevationRequest=0,addressTimer=null,addressRequest=0;
 const tileCache=new Map();
 function val(id){return $(id).value}
 function loadFile(file,cb){if(!file)return;const url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{cb(img);URL.revokeObjectURL(url)};img.onerror=()=>URL.revokeObjectURL(url);img.src=url}
@@ -142,6 +142,41 @@ function draw(){
  ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`${Math.max(13,16*sc)}px Arial`;ctx.fillText('Foto dokumentasi',W-margin,H-margin+lineH*.45);
 }
 function validCoords(){const lat=Number(val('lat')),lon=Number(val('lon'));return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180}
+function scheduleAddress(){
+ clearTimeout(addressTimer);
+ addressTimer=setTimeout(updateAddress,800);
+}
+async function updateAddress(){
+ if(!validCoords()){$('address').value='Koordinat tidak valid';draw();return}
+ const request=++addressRequest,lat=Number(val('lat')),lon=Number(val('lon'));
+ $('address').value='Mencari alamat berdasarkan koordinat...';draw();
+ try{
+  const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=id`;
+  const response=await fetch(url,{headers:{'Accept':'application/json'}});
+  if(!response.ok)throw Error('Layanan alamat tidak merespons (HTTP '+response.status+')');
+  const data=await response.json();
+  if(request!==addressRequest)return;
+  if(!data||!data.address)throw Error('Alamat tidak ditemukan');
+  const a=data.address;
+  const parts=[
+   a.road||a.pedestrian||a.footway||a.residential,
+   a.house_number,
+   a.hamlet||a.village||a.neighbourhood||a.suburb||a.quarter,
+   a.village||a.suburb||a.town||a.city_district||a.city,
+   a.county||a.city,
+   a.state,
+   a.postcode
+  ].filter(Boolean);
+  const unique=[...new Set(parts.map(x=>String(x).trim()).filter(Boolean))];
+  $('address').value=unique.length?unique.join(', '):(data.display_name||'Alamat tidak ditemukan');
+  draw();
+ }catch(error){
+  if(request!==addressRequest)return;
+  $('address').value='Alamat otomatis tidak tersedia. Periksa koneksi internet atau koordinat.';
+  console.warn('Reverse geocoding gagal:',error);
+  draw();
+ }
+}
 function scheduleElevation(){clearTimeout(elevationTimer);elevationTimer=setTimeout(updateElevation,500)}
 async function updateElevation(){
  if(!validCoords())return;const request=++elevationRequest,lat=Number(val('lat')),lon=Number(val('lon'));$('sensorStatus').value='Mengambil elevasi…';
@@ -177,11 +212,11 @@ async function updateMap(){
  }catch(e){if(key===mapKey){$('mapStatus').value='Peta gagal dimuat';console.warn(e);draw()}}
 }
 function scheduleMap(){clearTimeout(mapTimer);mapKey='';mapTimer=setTimeout(updateMap,450)}
-$('lat').addEventListener('input',()=>{scheduleElevation();scheduleMap();draw()});
-$('lon').addEventListener('input',()=>{scheduleElevation();scheduleMap();draw()});
+$('lat').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();draw()});
+$('lon').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();draw()});
 function compassName(deg){return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]}
 function handleOrientation(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;else if(e.absolute&&typeof e.alpha==='number')h=(360-e.alpha)%360;if(h===null||!Number.isFinite(h))return;h=(h+360)%360;$('bearing').value=String(Math.round(h));$('direction').value=compassName(h);$('sensorStatus').value='Kompas aktif';scheduleMap();draw()}
-$('gps').onclick=()=>{if(!navigator.geolocation){alert('Browser tidak mendukung GPS.');return}$('sensorStatus').value='Mengambil GPS…';navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(6);$('lon').value=p.coords.longitude.toFixed(6);scheduleElevation();scheduleMap();draw()},e=>{ $('sensorStatus').value='GPS gagal';alert('Lokasi tidak berhasil diambil: '+e.message)},{enableHighAccuracy:true,timeout:20000})};
+$('gps').onclick=()=>{if(!navigator.geolocation){alert('Browser tidak mendukung GPS.');return}$('sensorStatus').value='Mengambil GPS…';navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(6);$('lon').value=p.coords.longitude.toFixed(6);scheduleElevation();scheduleMap();scheduleAddress();draw()},e=>{ $('sensorStatus').value='GPS gagal';alert('Lokasi tidak berhasil diambil: '+e.message)},{enableHighAccuracy:true,timeout:20000})};
 $('compass').onclick=async()=>{try{if(typeof DeviceOrientationEvent==='undefined')throw Error('Sensor orientasi tidak didukung');if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw Error('Izin sensor tidak diberikan')}window.addEventListener('deviceorientation',handleOrientation,true);window.addEventListener('deviceorientationabsolute',handleOrientation,true);$('sensorStatus').value='Menunggu sensor kompas…'}catch(e){alert('Kompas tidak dapat diaktifkan: '+e.message)}};
 $('now').onclick=()=>{const d=new Date();$('date').value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');$('time').value=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');draw()};
 document.querySelectorAll('input:not([type=file]),textarea,select').forEach(el=>{if(!['lat','lon','opacity'].includes(el.id))el.addEventListener('input',draw);el.addEventListener('change',draw)});
@@ -189,7 +224,7 @@ $('opacity').addEventListener('input',draw);$('scale').addEventListener('change'
 $('download').onclick=()=>{if(!photo){alert('Pilih foto terlebih dahulu.');return}try{const a=document.createElement('a');a.download='LA-timemark.jpg';a.href=canvas.toDataURL('image/jpeg',.95);a.click()}catch(e){alert('Gagal mengekspor foto. Pastikan peta telah selesai dimuat, lalu coba lagi.')}};
 $('reset').onclick=()=>{if(confirm('Reset seluruh pengaturan?'))location.reload()};
 const now=new Date();$('date').value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');$('time').value=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-draw();updateElevation();updateMap();
+draw();updateElevation();updateMap();scheduleAddress();
 </script>
 </body>
 </html>
