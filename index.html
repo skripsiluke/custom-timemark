@@ -194,12 +194,31 @@ async function updateMap(){
  if(!validCoords())return;const lat=Number(val('lat')),lon=Number(val('lon')),z=16,key=`${lat.toFixed(6)},${lon.toFixed(6)},${val('bearing')}`;
  if(key===mapKey&&mapCanvas)return;mapKey=key;$('mapStatus').value='Memuat peta…';
  try{
-  const size=384,n=Math.pow(2,z),cx=lon2tile(lon,z),cy=lat2tile(lat,z),centerX=Math.floor(cx),centerY=Math.floor(cy),fracX=cx-centerX,fracY=cy-centerY;
+  // Susun tile OSM pada ukuran aslinya (256 px), lalu potong viewport
+  // 384 x 384 px yang tepat berpusat pada koordinat pengguna.
+  const size=384,tileSize=256,n=Math.pow(2,z);
+  const cx=lon2tile(lon,z),cy=lat2tile(lat,z);
+  const centerX=Math.floor(cx),centerY=Math.floor(cy);
+  const fracX=cx-centerX,fracY=cy-centerY;
   const startX=centerX-1,startY=centerY-1,tiles=[];
-  for(let dy=0;dy<3;dy++)for(let dx=0;dx<3;dx++)tiles.push({dx,dy,img:await getTile(startX+dx,startY+dy,z)});
+  for(let dy=0;dy<3;dy++){
+   for(let dx=0;dx<3;dx++){
+    tiles.push({dx,dy,img:await getTile(startX+dx,startY+dy,z)});
+   }
+  }
   if(key!==mapKey)return;
-  const c=document.createElement('canvas');c.width=size;c.height=size;const g=c.getContext('2d');
-  tiles.forEach(t=>g.drawImage(t.img,t.dx*128-fracX*128+128,t.dy*128-fracY*128+128,128,128));
+  const c=document.createElement('canvas');c.width=size;c.height=size;
+  const g=c.getContext('2d');
+  // Pusat peta berada di tengah kanvas; tidak ada ruang kosong di tepi.
+  const offsetX=size/2-tileSize-fracX*tileSize;
+  const offsetY=size/2-tileSize-fracY*tileSize;
+  tiles.forEach(t=>g.drawImage(
+   t.img,
+   offsetX+t.dx*tileSize,
+   offsetY+t.dy*tileSize,
+   tileSize,
+   tileSize
+  ));
   const px=size/2,py=size/2;
   // Direction cone is displayed only when a valid compass heading exists.
   const heading=Number(val('bearing'));
