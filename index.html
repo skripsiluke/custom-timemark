@@ -114,7 +114,7 @@ function draw(){
  ctx.font=`bold ${f1}px Arial`;const compassText=`◉ ${val('bearing')}° ${val('direction')}`;const cw=Math.max(160*sc,ctx.measureText(compassText).width+pad*2);
  ctx.font=`bold ${f2}px Arial`;const altText=`▲ ${val('altitude')} m`;const aw=ctx.measureText(altText).width+pad*2;
  roundedRect(margin,margin,cw,chipH,8*sc,accent);ctx.fillStyle=white;ctx.font=`bold ${f1}px Arial`;ctx.fillText(compassText,margin+pad,margin+chipH/2);
- roundedRect(margin+cw+10*sc,margin,aw,chipH,8*sc,panel);ctx.font=`bold ${f2}px Arial`;ctx.fillText(altText,margin+cw+10*sc+pad,margin+chipH/2);
+ roundedRect(margin+cw+10*sc,margin,aw,chipH,8*sc,panel);ctx.font=`bold ${f2}px Arial`;ctx.fillStyle='#FFFFFF';ctx.fillText(altText,margin+cw+10*sc+pad,margin+chipH/2);
  const coord=`● ${val('lat')}°, ${val('lon')}°`;ctx.font=`${f2}px Arial`;const coordW=Math.min(W-margin*2,Math.max(270*sc,ctx.measureText(coord).width+pad*2));
  roundedRect(margin,margin+chipH+10*sc,coordW,chipH,8*sc,panel);ctx.fillStyle=white;ctx.fillText(coord,margin+pad,margin+chipH+10*sc+chipH/2);
  // Coordinate-linked mini map (actual OSM tile imagery)
