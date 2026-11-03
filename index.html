@@ -128,8 +128,8 @@ function draw(){
  const bottomFont=Math.max(19,Math.min(36*sc,W*.045)),lineH=bottomFont*1.28;
  const titleY=H-margin-(lineH*3.3);
  const logoSize=Math.min(78*sc,W*.12,H*.10);
- if(logo){const s=Math.min(logoSize/logo.width,logoSize/logo.height);ctx.drawImage(logo,margin,titleY-logoSize-32*sc,logo.width*s,logo.height*s)}
- else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-32*sc,logoSize/2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize*.40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font=`bold ${logoSize*.55}px Arial`;ctx.textAlign='center';ctx.fillText('✿',margin+logoSize/2,titleY-logoSize/2-18*sc+logoSize*.12)}
+ if(logo){const s=Math.min(logoSize/logo.width,logoSize/logo.height);ctx.drawImage(logo,margin,titleY-logoSize-18*sc,logo.width*s,logo.height*s)}
+ else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize/2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize*.40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font=`bold ${logoSize*.55}px Arial`;ctx.textAlign='center';ctx.fillText('✿',margin+logoSize/2,titleY-logoSize/2-18*sc+logoSize*.12)}
  ctx.textAlign='left';ctx.fillStyle=white;ctx.font=`bold ${bottomFont*1.12}px Arial`;ctx.fillText(val('title'),margin,titleY);
  const detailX=margin+bottomFont*.9,detailY=titleY+lineH*1.15;
  ctx.fillStyle=accent;ctx.fillRect(margin,detailY-lineH*.55,Math.max(4,5*sc),lineH*2.9);
