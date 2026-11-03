@@ -24,6 +24,8 @@ button.secondary{background:#edf1f5;color:#273444}button.accent{background:var(-
 .preview-head strong{font-size:15px}.hint{font-size:12px;color:var(--muted)}
 .stage{width:min(100%,650px);background:#e9edf2;border-radius:10px;overflow:hidden;display:flex;justify-content:center;align-items:center;min-height:360px}
 canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
+.picker-map{height:300px;width:100%;border:1px solid #d6dce5;border-radius:10px;overflow:hidden;background:#e9edf2;z-index:1}
+.map-help{font-size:12px;color:var(--muted);margin:6px 0 0}
 .note{font-size:12px;color:#657184;max-width:650px;margin:12px 0 0}
 @media(max-width:850px){main{grid-template-columns:1fr}.panel{max-height:none}.stage{min-height:260px}}
 </style>
@@ -61,6 +63,9 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
       <div><label>Latitude</label><input id="lat" value="-6.365782"></div>
       <div><label>Longitude</label><input id="lon" value="106.238739"></div>
     </div>
+    <label style="margin-top:14px">Atau pilih titik koordinat di peta</label>
+    <div id="coordinateMap" class="picker-map" aria-label="Peta untuk memilih titik koordinat"></div>
+    <p class="map-help">Ketuk peta untuk memilih lokasi. Penanda akan berpindah dan latitude serta longitude di atas terisi otomatis. Anda juga tetap bisa mengetik koordinat secara manual.</p>
     <div class="actions">
       <button class="secondary" id="gps">Ambil GPS perangkat</button>
       <button class="secondary" id="compass">Aktifkan kompas HP</button>
@@ -86,14 +91,41 @@ canvas{display:block;width:100%;height:auto;max-height:78vh;object-fit:contain}
 <section class="preview">
   <div class="preview-head"><strong>Pratinjau hasil</strong><span class="hint" id="orientationLabel">Orientasi mengikuti foto</span></div>
   <div class="stage"><canvas id="canvas" width="900" height="1200"></canvas></div>
-  <p class="note">Peta mini menggunakan OpenStreetMap berdasarkan koordinat yang dimasukkan. Peta memerlukan koneksi internet. Foto diproses di browser dan tidak dikirim ke server. Elevasi merupakan estimasi data medan; kompas mengikuti sensor perangkat jika tersedia. Arah kompas tidak dapat ditentukan hanya dari satu koordinat.</p>
+  <p class="note">Peta mini menggunakan peta CARTO berbasis OpenStreetMap berdasarkan koordinat yang dimasukkan. Peta memerlukan koneksi internet. Foto diproses di browser dan tidak dikirim ke server. Elevasi merupakan estimasi data medan; kompas mengikuti sensor perangkat jika tersedia. Arah kompas tidak dapat ditentukan hanya dari satu koordinat.</p>
 </section>
 </main>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d');
 let photo=null,logo=null,mapCanvas=null,mapKey='',mapTimer=null,elevationTimer=null,elevationRequest=0,addressTimer=null,addressRequest=0;
 const tileCache=new Map();
+let pickerMap=null,pickerMarker=null,pickerMapSync=false;
 function val(id){return $(id).value}
+function setCoordinatesFromMap(lat,lon){
+ $('lat').value=lat.toFixed(6);$('lon').value=lon.toFixed(6);
+ scheduleElevation();scheduleMap();scheduleAddress();draw();
+}
+function initCoordinatePicker(){
+ if(typeof L==='undefined'){
+  $('coordinateMap').innerHTML='<div style="padding:14px;font-size:13px">Peta tidak dapat dimuat. Periksa koneksi internet.</div>';
+  return;
+ }
+ const initialLat=Number(val('lat'))||-6.2,initialLon=Number(val('lon'))||106.8;
+ pickerMap=L.map('coordinateMap').setView([initialLat,initialLon],15);
+ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+  maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap &copy; CARTO'
+ }).addTo(pickerMap);
+ pickerMarker=L.marker([initialLat,initialLon],{draggable:true}).addTo(pickerMap);
+ pickerMap.on('click',e=>{pickerMarker.setLatLng(e.latlng);setCoordinatesFromMap(e.latlng.lat,e.latlng.lng)});
+ pickerMarker.on('dragend',()=>{const p=pickerMarker.getLatLng();setCoordinatesFromMap(p.lat,p.lng)});
+ setTimeout(()=>pickerMap.invalidateSize(),150);
+}
+function syncPickerMap(){
+ if(!pickerMap||pickerMapSync||!validCoords())return;
+ const p=[Number(val('lat')),Number(val('lon'))];
+ pickerMapSync=true;pickerMarker.setLatLng(p);pickerMap.panTo(p,{animate:false});pickerMapSync=false;
+}
 function loadFile(file,cb){if(!file)return;const url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{cb(img);URL.revokeObjectURL(url)};img.onerror=()=>URL.revokeObjectURL(url);img.src=url}
 $('photo').onchange=e=>loadFile(e.target.files[0],img=>{photo=img;$('orientationLabel').textContent=img.width>=img.height?'Landscape · '+img.width+' × '+img.height:'Portrait · '+img.width+' × '+img.height;draw()});
 $('logo').onchange=e=>loadFile(e.target.files[0],img=>{logo=img;draw()});
@@ -128,8 +160,8 @@ function draw(){
  const bottomFont=Math.max(19,Math.min(36*sc,W*.045)),lineH=bottomFont*1.28;
  const titleY=H-margin-(lineH*3.3);
  const logoSize=Math.min(78*sc,W*.12,H*.10);
- if(logo){const s=Math.min(logoSize/logo.width,logoSize/logo.height);ctx.drawImage(logo,margin,titleY-logoSize-18*sc,logo.width*s,logo.height*s)}
- else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize/2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-18*sc,logoSize*.40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font=`bold ${logoSize*.55}px Arial`;ctx.textAlign='center';ctx.fillText('✿',margin+logoSize/2,titleY-logoSize/2-18*sc+logoSize*.12)}
+ if(logo){const s=Math.min(logoSize/logo.width,logoSize/logo.height);ctx.drawImage(logo,margin,titleY-logoSize-32*sc,logo.width*s,logo.height*s)}
+ else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-32*sc,logoSize/2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f5d31c';ctx.beginPath();ctx.arc(margin+logoSize/2,titleY-logoSize/2-32*sc,logoSize*.40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#398b42';ctx.font=`bold ${logoSize*.55}px Arial`;ctx.textAlign='center';ctx.fillText('✿',margin+logoSize/2,titleY-logoSize/2-32*sc+logoSize*.12)}
  ctx.textAlign='left';ctx.fillStyle=white;ctx.font=`bold ${bottomFont*1.12}px Arial`;ctx.fillText(val('title'),margin,titleY);
  const detailX=margin+bottomFont*.9,detailY=titleY+lineH*1.15;
  ctx.fillStyle=accent;ctx.fillRect(margin,detailY-lineH*.55,Math.max(4,5*sc),lineH*2.9);
@@ -187,7 +219,7 @@ function lat2tile(lat,z){const r=lat*Math.PI/180;return (1-Math.asinh(Math.tan(r
 async function getTile(x,y,z){
  const n=Math.pow(2,z);x=(x%n+n)%n;if(y<0||y>=n)throw Error('Tile di luar batas');const key=`${z}/${x}/${y}`;
  if(tileCache.has(key))return tileCache.get(key);
- const promise=new Promise((resolve,reject)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>resolve(im);im.onerror=()=>reject(Error('Tile peta gagal dimuat'));im.src=`https://tile.openstreetmap.org/${z}/${x}/${y}.png`});
+ const promise=new Promise((resolve,reject)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>resolve(im);im.onerror=()=>reject(Error('Tile peta gagal dimuat'));im.src=`https://basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`});
  tileCache.set(key,promise);try{return await promise}catch(e){tileCache.delete(key);throw e}
 }
 async function updateMap(){
@@ -231,8 +263,9 @@ async function updateMap(){
  }catch(e){if(key===mapKey){$('mapStatus').value='Peta gagal dimuat';console.warn(e);draw()}}
 }
 function scheduleMap(){clearTimeout(mapTimer);mapKey='';mapTimer=setTimeout(updateMap,450)}
-$('lat').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();draw()});
-$('lon').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();draw()});
+$('lat').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();syncPickerMap();draw()});
+$('lon').addEventListener('input',()=>{scheduleElevation();scheduleMap();scheduleAddress();syncPickerMap();draw()});
+$('lat').addEventListener('change',syncPickerMap);$('lon').addEventListener('change',syncPickerMap);
 function compassName(deg){return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]}
 function handleOrientation(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;else if(e.absolute&&typeof e.alpha==='number')h=(360-e.alpha)%360;if(h===null||!Number.isFinite(h))return;h=(h+360)%360;$('bearing').value=String(Math.round(h));$('direction').value=compassName(h);$('sensorStatus').value='Kompas aktif';scheduleMap();draw()}
 $('gps').onclick=()=>{if(!navigator.geolocation){alert('Browser tidak mendukung GPS.');return}$('sensorStatus').value='Mengambil GPS…';navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(6);$('lon').value=p.coords.longitude.toFixed(6);scheduleElevation();scheduleMap();scheduleAddress();draw()},e=>{ $('sensorStatus').value='GPS gagal';alert('Lokasi tidak berhasil diambil: '+e.message)},{enableHighAccuracy:true,timeout:20000})};
@@ -243,7 +276,7 @@ $('opacity').addEventListener('input',draw);$('scale').addEventListener('change'
 $('download').onclick=()=>{if(!photo){alert('Pilih foto terlebih dahulu.');return}try{const a=document.createElement('a');a.download='LA-timemark.jpg';a.href=canvas.toDataURL('image/jpeg',.95);a.click()}catch(e){alert('Gagal mengekspor foto. Pastikan peta telah selesai dimuat, lalu coba lagi.')}};
 $('reset').onclick=()=>{if(confirm('Reset seluruh pengaturan?'))location.reload()};
 const now=new Date();$('date').value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');$('time').value=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-draw();updateElevation();updateMap();scheduleAddress();
+draw();initCoordinatePicker();updateElevation();updateMap();scheduleAddress();
 </script>
 </body>
 </html>
